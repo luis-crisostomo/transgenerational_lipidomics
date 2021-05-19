@@ -15,7 +15,9 @@ library(curl)
 lipids <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/main/Lipidomics.csv"), header=TRUE, row.names=1)
 metabolites <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/main/Metabolomics.csv"), header=TRUE, row.names=1)
 
-#structure data for PLS-DA
+#Generation F0
+
+##structure data for PLS-DA
 lipids_f0 <- subset(lipids, generation == 'F0', 5:19) #select lipidomics F0
 lipids_f0[] <- lapply(lipids_f0, as.numeric) #change column type to numeric (essential for operations)
 
@@ -28,7 +30,7 @@ metlip_f0 <- metabolites_f0[lip_met] #dataframe with metabolites selected/assign
 design_f0 <- subset(lipids, generation == 'F0', c('sample', 'group')) #sample info
 f0_factors <- as.factor(design_f0$group) #phenotype selectors for PLS-DA (exp. groups) 
 
-#remove missing values and adapt factors
+##remove missing values and adapt factors
 purge_f0 <- c("c14_0","c16_0","c16_1n7","c18_0","c18_1n9","c18_1n7","c18_2n6","c20_3n6","c20_4n6","c22_5n6","c22_6n3") #drop columns without data
 cleanlipids_f0 <- na.omit(lipids_f0[purge_f0]) #remove rows with missing values
 cleanfactor_f0 <- as.factor(rep(c("CTRL","HFD","HFDt"), times = c(5,3,5))) #remaining samples
@@ -36,30 +38,30 @@ clean.metlip_f0 <- metlip_f0[!(rownames(metlip_f0) %in% c("F0_HFD1","F0_HFD3","F
 clean.metabolites_f0 <- metabolites_f0[!(rownames(metabolites_f0) %in% c("F0_HFD1","F0_HFD3","F0_HFD6")), !(colnames(metabolites_f0) %in% lip_met)]
 labels_f0 <- c("CTRL1","CTRL2","CTRL3","CTRL4","CTRL5","HFD2","HFD4","HFD5","HFDt1","HFDt2","HFDt3","HFDt4","HFDt5")
 
-#tables purged from missing values ready for processing
-cleanlipids_f0
-clean.metlip_f0
-clean.metabolites_f0
-cleanfactor_f0
-labels_f0
-
-#run PLS-DA and sPLS-DA
+##run PLS-DA and sPLS-DA
 library('mixOmics') 
 library('igraph')
 
-##obtain variable factors by PLS-DA (2 components) and write the output in .csv
+###obtain variable factors by PLS-DA (2 components) and write the output in .csv
 result.plsda <- plsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2)
-write.table(result.plsda[["loadings"]][["X"]], "sPLS-DA Gen0 - X.csv", sep=";", col.names = NA) 
+write.table(result.plsda[["loadings"]][["X"]], "PLS-DA Gen0 - Component load.csv", sep=";", col.names = NA) 
 
-#run sPLS-DA with 
+###sPLS-DA, two components, selecting the number of variables with PLS-DA component load > |0.2| for components 1 and 2
 result.splsda <- splsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2, keepX = c(10, 5))
-plotIndiv(result.splsda, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="sPLS-DA - Generation F0")
 
+###Save sPLS-DA plot 
+tiff("sPLS-DA - Generation F0.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.splsda, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="sPLS-DA - Generation F0")
+dev.off()
+
+###Save sPLS-DA plot with background
 background <- background.predict(result.splsda, comp.predicted=2, dist = "centroids.dist") 
 plotIndiv(result.splsda, comp = 1:2, group = cleanfactor_f0, ind.names = FALSE, title = "Generation F0: sPLS-DA", legend = TRUE, centroid = TRUE, col.per.group = c("dodgerblue","red3","darkgreen"), pch = c(15:17),  background = background)
 
 #figure sPLS-DA lipidomics with background (save as svg 600x600)
+tiff("sPLS-DA background - Generation F0.tiff", width=600, height=600, units="px", res=100)
 plotIndiv(result.splsda, comp = 1:2, group = cleanfactor_f0, ind.names = labels_f0, title = "Generation F0: sPLS-DA", legend = FALSE, centroid = TRUE, col.per.group = c("dodgerblue","red3","darkgreen"), abline = TRUE, background = background)
+dev.off()
 
 #two-omics PLS/sPLS
 result.2omics.pls <- pls(cleanlipids_f0, clean.metlip_f0) #method
