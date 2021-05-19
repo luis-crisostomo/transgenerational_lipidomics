@@ -11,13 +11,11 @@ BiocManager::install()
 BiocManager::install('mixOmics')
 
 #import metabolomics and lipidomics files
-lipids = read.csv2("Lipidomics.csv", header=TRUE, row.names=1)
-metabolites = read.csv2("Metabolomics.csv", header=TRUE, row.names=1)
+library(curl)
+lipids <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/main/Lipidomics.csv"), header=TRUE, row.names=1)
+metabolites <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/main/Metabolomics.csv"), header=TRUE, row.names=1)
 
 #structure data for PLS-DA
-library("mixOmics") #load mixOmics package
-library("igraph") #mixOmics does not load it automatically
-
 lipids_f0 <- subset(lipids, generation == 'F0', 5:19) #select lipidomics F0
 lipids_f0[] <- lapply(lipids_f0, as.numeric) #change column type to numeric (essential for operations)
 
@@ -45,26 +43,16 @@ clean.metabolites_f0
 cleanfactor_f0
 labels_f0
 
-#run PLS-DA or sPLS-DA
+#run PLS-DA and sPLS-DA
+library('mixOmics') 
+library('igraph')
+
+##obtain variable factors by PLS-DA (2 components) and write the output in .csv
 result.plsda <- plsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2)
-plotIndiv(result.plsda, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="PLS-DA - Generation F0")
+write.table(result.plsda[["loadings"]][["X"]], "sPLS-DA Gen0 - X.csv", sep=";", col.names = NA) 
 
-selectVar(result.plsda, comp=1)$value #Selected variables on component 1
-selectVar(result.plsda, comp=2)$value #Selected variables on component 2
-plotLoadings(result.plsda, contrib = 'max', method = 'mean', comp = 1) #plot loadings per component and which group is more affected by it
-write.table(result.plsda[["loadings"]][["X"]], "sPLS-DA Gen0 - X.txt", sep="\t") #write variable loadings in .txt
-write.table(result.plsda[["loadings"]][["Y"]], "sPLS-DA Gen0 - Y.txt", sep="\t") #write group loadings in .txt
-
-
-#tweaking the analysis for proper sPLS-DA
-result.plsda2 <- plsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2)
-#perf.plsda <- perf(result.plsda2, validation = "Mfold", folds = 3, progressBar = FALSE, nrepeat = 50) #you must have more than 3 comps for this validation
-res.perf <- perf(result.plsda2, validation = "loo", progressBar = TRUE) #another kind of validation
-plot(res.perf, col = color.mixo(5:7), sd = TRUE, legend.position = "horizontal")
-
-#the number of samples does not allow proper simulation to evaluate how many variables should be kept in each component (for sPLS-DA). However, the loading plots can be really informative in this regard!
-#test if selecting variables with more than [0.2] loading are more discriminant
-result.splsda <- splsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2, keepX = c(10, 5)) #parameter keepX must be optimized
+#run sPLS-DA with 
+result.splsda <- splsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2, keepX = c(10, 5))
 plotIndiv(result.splsda, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="sPLS-DA - Generation F0")
 
 background <- background.predict(result.splsda, comp.predicted=2, dist = "centroids.dist") 
