@@ -1,9 +1,18 @@
+#check package requirements
+##CRAN
+list.of.packages <- c('dplyr', 'curl', 'vegan', 'mixOmics', 'igraph')
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages, ask = F, dependencies = T)
+
+##Bioconda
+if (!requireNamespace('BiocManager', quietly = TRUE))
+    install.packages('BiocManager')
+BiocManager::install()
+BiocManager::install('mixOmics')
+
 #import metabolomics and lipidomics files
 lipids = read.csv2("Lipidomics.csv", header=TRUE, row.names=1)
 metabolites = read.csv2("Metabolomics.csv", header=TRUE, row.names=1)
-
-if (!require('mixOmics',)) install.packages('mixOmics')
-library(package)
 
 #structure data for PLS-DA
 library("mixOmics") #load mixOmics package
