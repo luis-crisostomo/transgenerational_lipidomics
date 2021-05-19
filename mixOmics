@@ -101,38 +101,6 @@ cex.node.name = 10, lty.edge = c("solid", "dashed"), lwd.edge = c(2,2), cutoff =
 net.result <- network(result.2omics.spls) #in case of error, increase plot area
 write.graph(net.result$gR, file = "network.gml", format = "gml") #save network for cytescape
 
-#block.plsda or #block.splsda (requires revision)
-rownames(cleanlipids_f0) <- rownames(clean.metlip_f0) #to make sure the rows are the same
-X = list(Lipidomics = cleanlipids_f0, Lipid_precursors = clean.metlip_f0, Metabolomics = clean.metabolites_f0)
-results.block.plsda <- block.plsda(X, cleanfactor_f0)
-write.table(results.block.plsda[["loadings"]][["Lipidomics"]], "mydata.txt", sep="\t")
-write.table(results.block.plsda[["loadings"]][["Lipid_precursors"]], "mydata.txt", sep="\t")
-write.table(results.block.plsda[["loadings"]][["Metabolomics"]], "mydata.txt", sep="\t")
-
-list.keepX <- list(Lipidomics = c(9, 5), Lipid_precursors = c(5,6), Metabolomics = c(9, 8))
-results.diablo <- block.splsda(X, cleanfactor_f0, ncomp = 2, keepX = list.keepX)
-
-plotIndiv(results.diablo, col.per.group = c("dodgerblue","red3","darkgreen"), pch = c(15:17), ellipse = TRUE, centroid = TRUE, ind.names = FALSE, legend=TRUE, title = 'Generation F0: DIABLO analysis') #block plot
-plotVar(results.diablo) ## variable plot
-X11()
-plotDiablo(results.diablo, ncomp = 1) #DIABLO mosaic - component 1
-X11()
-circosPlot(results.diablo, line = TRUE, cutoff=0.7) #circus plot
-network(results.diablo, blocks = c(1,2,3), color.node = c('orchid', 'brown','green'), cutoff = 0.5, save = 'tiff', name.save = 'Gen F0 - DIABLO network') #bubble chart
-#network(results.diablo, comp = list(Lipidomics = 1:2, Lipid_precursors = 1:2, Metabolomics = 1:2), blocks = c(1,2,3), color.node = c('orchid', 'brown','green'), cex.node.name = 12, lty.edge = c("solid", "dashed"), lwd.edge = c(3,3), cutoff = 0.5, interactive = TRUE) #interactive buble chart (optimize cutoff)
-#network(results.diablo, comp = list(Lipidomics = 1:2, Lipid_precursors = 1:2, Metabolomics = 1:2), blocks = c(1,2,3), color.node = c('orchid', 'brown','green'), cex.node.name = 12, lty.edge = c("solid", "dashed"), lwd.edge = c(3,3), cutoff = 0.7, save = 'tiff', name.save = 'Gen F0 - DIABLO network2')
-X11()
-cimDiablo(results.diablo, color.blocks = c('orchid', 'brown', 'green'), comp = 1, margins = c(5, 18), legend.position = "right", size.legend = 0.8)
-
-#to control figure resolution and size
-tiff("Gen F0 - DIABLO circus.tiff", units="in", width=6, height=6, res=600)
-circosPlot(results.diablo, line = TRUE, cutoff=0.7) #the plot to control
-dev.off()
-#another tweak
-tiff("Gen F0 - DIABLO CIM.tiff", units="in", width=10, height=6, res=300)
-cimDiablo(results.diablo, color.blocks = c('orchid', 'brown', 'green'), comp = 1, margins = c(5, 18), legend.position = "right", size.legend = 0.8) #the plot to control
-dev.off()
-
 #use PERMANOVA to find p-values for sPLS-DA and two-omics sPLS (vegan package)
 library(vegan) #load vegan package
 result.permanova.splsda <- adonis2(result.splsda[["variates"]][["X"]] ~ cleanfactor_f0, data = as.data.frame(result.splsda[["variates"]][["X"]]), method = "euclidean", by = "terms", permutations = 999, parallel = getOption("mc.cores")) #PERMANOVA for sPLS-DA
@@ -141,29 +109,3 @@ result.permanova.splsda <- adonis2(result.splsda[["variates"]][["X"]] ~ cleanfac
 average.dist_f0 <- (result.2omics.spls[["variates"]][["X"]]+result.2omics.spls[["variates"]][["Y"]])/2 #calculate XY-variate 
 result.permanova.2omicsspls <- adonis2(average.dist_f0 ~ cleanfactor_f0, data = as.data.frame(average.dist_f0), method = "euclidean", by = "terms", permutations = 999, parallel = getOption("mc.cores")) #PERMANOVA for two-omics sPLS
 #result.mrpp.2omicsspls <- mrpp(as.data.frame(average.dist_f0), cleanfactor_f0, permutations = 999, distance = "euclidean")
-
-#block.splsda
-# -------------
-data("breast.TCGA")
-# this is the X data as a list of mRNA, miRNA and proteins
-data = list(mrna = breast.TCGA$data.train$mrna, mirna = breast.TCGA$data.train$mirna,
-protein = breast.TCGA$data.train$protein)
-# set up a full design where every block is connected
-design = matrix(1, ncol = length(data), nrow = length(data),
-dimnames = list(names(data), names(data)))
-diag(design) =  0
-design
-# set number of component per data set
-ncomp = c(2)
-# set number of variables to select, per component and per data set (this is set arbitrarily)
-list.keepX = list(mrna = rep(20, 2), mirna = rep(10,2), protein = rep(10, 2))
-
-
-TCGA.block.splsda = block.splsda(X = data, Y = breast.TCGA$data.train$subtype,
-ncomp = ncomp, keepX = list.keepX, design = design)
-TCGA.block.splsda
-
-plotIndiv(TCGA.block.splsda, ind.names = FALSE)
-# illustrates coefficient weights in each block
-plotLoadings(TCGA.block.splsda, ncomp = 1, contrib = 'max')
-plotVar(TCGA.block.splsda, style = 'graphics', legend = TRUE)
