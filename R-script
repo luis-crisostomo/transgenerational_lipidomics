@@ -12,12 +12,12 @@ BiocManager::install('mixOmics')
 
 #import metabolomics and lipidomics files
 library(curl)
-lipids <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/main/Lipidomics.csv"), header=TRUE, row.names=1)
-metabolites <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/main/Metabolomics.csv"), header=TRUE, row.names=1)
+lipids <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/master/Lipidomics.csv"), header=TRUE, row.names=1)
+metabolites <- read.csv(curl("https://raw.githubusercontent.com/luis-crisostomo/transgenerational_lipidomics/master/Metabolomics.csv"), header=TRUE, row.names=1)
 
 #Generation F0
 
-##structure data for PLS-DA
+##sorting data for statistical methods
 lipids_f0 <- subset(lipids, generation == 'F0', 5:19) #select lipidomics F0
 lipids_f0[] <- lapply(lipids_f0, as.numeric) #change column type to numeric (essential for operations)
 
@@ -42,69 +42,227 @@ labels_f0 <- c("CTRL1","CTRL2","CTRL3","CTRL4","CTRL5","HFD2","HFD4","HFD5","HFD
 library('mixOmics') 
 library('igraph')
 
-###obtain variable factors by PLS-DA (2 components) and write the output in .csv
-result.plsda <- plsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2)
-write.table(result.plsda[["loadings"]][["X"]], "PLS-DA Gen0 - Component load.csv", sep=";", col.names = NA) 
+###obtain variable loading factors by PLS-DA (2 components) and write the output in .csv
+result.plsda_f0 <- plsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2)
+write.table(result.plsda_f0[["loadings"]][["X"]], "PLS-DA Gen0 - Component load.csv", sep=";", col.names = NA) 
 
 ###sPLS-DA, two components, selecting the number of variables with PLS-DA component load > |0.2| for components 1 and 2
-result.splsda <- splsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2, keepX = c(10, 5))
+result.splsda_f0 <- splsda(cleanlipids_f0, cleanfactor_f0, ncomp = 2, keepX = c(10, 5))
 
 ###Save sPLS-DA plot 
 tiff("sPLS-DA - Generation F0.tiff", width=600, height=600, units="px", res=100)
-plotIndiv(result.splsda, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="sPLS-DA - Generation F0")
+plotIndiv(result.splsda_f0, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="sPLS-DA - Generation F0")
 dev.off()
 
 ###Save sPLS-DA plot with background
-background <- background.predict(result.splsda, comp.predicted=2, dist = "centroids.dist") 
-plotIndiv(result.splsda, comp = 1:2, group = cleanfactor_f0, ind.names = FALSE, title = "Generation F0: sPLS-DA", legend = TRUE, centroid = TRUE, col.per.group = c("dodgerblue","red3","darkgreen"), pch = c(15:17),  background = background)
-
-#figure sPLS-DA lipidomics with background (save as svg 600x600)
 tiff("sPLS-DA background - Generation F0.tiff", width=600, height=600, units="px", res=100)
-plotIndiv(result.splsda, comp = 1:2, group = cleanfactor_f0, ind.names = labels_f0, title = "Generation F0: sPLS-DA", legend = FALSE, centroid = TRUE, col.per.group = c("dodgerblue","red3","darkgreen"), abline = TRUE, background = background)
+plotIndiv(result.splsda_f0, comp = 1:2, group = cleanfactor_f0, ind.names = labels_f0, title = "Generation F0: sPLS-DA", 
+legend = FALSE, centroid = TRUE, col.per.group = c("dodgerblue","red3","darkgreen"), abline = TRUE, background = background)
 dev.off()
 
-#two-omics PLS/sPLS
-result.2omics.pls <- pls(cleanlipids_f0, clean.metlip_f0) #method
-plotIndiv(result.2omics.pls)
-plotVar(result.2omics.pls)
+##use PERMANOVA to find p-values for sPLS-DA and two-omics sPLS (vegan package)
+library(vegan)
+result.permanova.splsda_f0 <- adonis2(result.splsda_f0[["variates"]][["X"]] ~ cleanfactor_f0, data = as.data.frame(result.splsda_f0[["variates"]][["X"]]), 
+method = "euclidean", by = "terms", permutations = 999, parallel = getOption("mc.cores"))
+write.table(result.permanova.splsda_f0, "sPLS-DA Gen0 - PERMANOVA.csv", sep=";", col.names = NA)
 
-result.2omics.pls[["loadings"]][["Y"]] #see loading values for block Y (metabolites)
-plotLoadings(result.2omics.pls, comp = 1) #plot loading variable per comp (this is an unsupervised method)
-plotLoadings(result.2omics.pls, comp = 2)
-write.table(result.2omics.pls[["loadings"]][["X"]], "sPLS Gen0 - Lipids.txt", sep="\t") #write results in txt (for supplemental data)
-write.table(result.2omics.pls[["loadings"]][["Y"]], "sPLS Gen0 - Lipid_precursors.txt", sep="\t")
+##run two-omics PLS and sPLS
+###obtain variable loading factors by PLS (2 blocks, 2 components) and write the output in .csv
+result.2omics.pls_f0 <- pls(cleanlipids_f0, clean.metlip_f0) 
+write.table(result.2omics.pls_f0[["loadings"]][["X"]], "PLS Gen0 - Fatty acids.csv", sep=";", col.names = NA)
+write.table(result.2omics.pls_f0[["loadings"]][["Y"]], "sPLS Gen0 - Lipid-related metabolites.csv", sep=";", col.names = NA)
 
-result.2omics.spls <- spls(cleanlipids_f0, clean.metlip_f0, ncomp = 2, keepX = c(9, 5), keepY = c(5,6)) #method, with variables load > [0.2]
-#save as Gen F0 - 2Omics sPLS.svg (600x600)
-plotIndiv(result.2omics.spls, group = cleanfactor_f0, col.per.group = c("dodgerblue","red3","darkgreen"), rep.space = "XY-variate", centroid = TRUE, ellipse = TRUE, abline = TRUE, size.xlabel = 12, size.ylabel = 12, ind.names = labels_f0,  xlim = c(-5,5), ylim = c(-5,5), title = 'Generation F0: 2-omics sPLS')
+##two-omics sPLS
+###two-omics sPLS, two blocks (fatty acids vs. lipid-related metabolites) and two components, selecting the number of variables with PLS component load > |0.2| for components 1 and 2
+result.2omics.spls_f0 <- spls(cleanlipids_f0, clean.metlip_f0, ncomp = 2, keepX = c(9, 5), keepY = c(5,6))
 
-#correlations 2omics
-X11()
-cim(result.2omics.spls, comp = 1)
-X11()
-cim(result.2omics.spls, comp = 2)
-X11()
-cim(result.2omics.spls, comp = c(1,2))
+###save 2-Omics sPLS plot
+tiff("2-omics sPLS - Generation F0.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.2omics.spls_f0, group = cleanfactor_f0, col.per.group = c("dodgerblue","red3","darkgreen"), 
+rep.space = "XY-variate", centroid = TRUE, ellipse = TRUE, abline = TRUE, size.xlabel = 12, size.ylabel = 12, ind.names = labels_f0,  
+xlim = c(-5,5), ylim = c(-5,5), title = 'Generation F0: 2-omics sPLS')
+dev.off()
 
-#network graphs sPLS 2Omics
-network(result.2omics.spls, comp = c(1,2), color.node = c('orchid', 'brown'), 
+###save 2-Omics sPLS network plot
+svg("2-omics sPLS network - Generation F0.svg")
+network(result.2omics.spls_f0, comp = c(1,2), color.node = c('orchid', 'brown'), 
 row.names = c(" C14:0 "," C16:0 ", "C16:1n7", " C18:0 ", "C18:1n9", "C18:1n7", "C18:2n6", "C20:3n6", "C20:4n6", "C22:5n6", "C22:6n3"), 
 col.names = c("Glycerol","Choline","Acetate","P-Choline","EtNH2","P-EtNH2","m-Inositol","3OH-But"), 
-cex.node.name = 10, lty.edge = c("solid", "dashed"), lwd.edge = c(2,2), cutoff = 0.4, interactive = TRUE) #interactive buble chart (optimize cutoff)
+cex.node.name = 10, lty.edge = c("solid", "dashed"), lwd.edge = c(2,2), cutoff = 0.49)
+dev.off()
 
-# network(result.2omics.spls, comp = c(1,2), color.node = c('orchid', 'brown'), 
-# row.names = c(" C14:0 "," C16:0 ", "C16:1n7", " C18:0 ", "C18:1n9", "C18:1n7", "C18:2n6", "C20:3n6", "C20:4n6", "C22:5n6", "C22:6n3"), 
-# col.names = c("Glycerol","Choline","Acetate","P-Choline","EtNH2","P-EtNH2","m-Inositol","3OH-But"), 
-# cex.node.name = 10, lty.edge = c("solid", "dashed"), lwd.edge = c(2,2), cutoff = 0.5, save = 'tiff', name.save = 'Gen F0 - 2Omics sPLSnetwork') #bubble chart (2 comps)
+##use PERMANOVA to find p-values for two-omics sPLS (vegan package) and write to .csv
+average.dist_f0 <- (result.2omics.spls[["variates"]][["X"]]+result.2omics.spls[["variates"]][["Y"]])/2 
+result.permanova.2omicsspls_f0 <- adonis2(average.dist_f0 ~ cleanfactor_f0, data = as.data.frame(average.dist_f0), method = "euclidean", by = "terms", 
+permutations = 999, parallel = getOption("mc.cores")) 
+write.table(result.permanova.2omicsspls_f0, "2omics sPLS Gen0 - PERMANOVA.csv", sep=";", col.names = NA)
 
-net.result <- network(result.2omics.spls) #in case of error, increase plot area
-write.graph(net.result$gR, file = "network.gml", format = "gml") #save network for cytescape
 
-#use PERMANOVA to find p-values for sPLS-DA and two-omics sPLS (vegan package)
-library(vegan) #load vegan package
-result.permanova.splsda <- adonis2(result.splsda[["variates"]][["X"]] ~ cleanfactor_f0, data = as.data.frame(result.splsda[["variates"]][["X"]]), method = "euclidean", by = "terms", permutations = 999, parallel = getOption("mc.cores")) #PERMANOVA for sPLS-DA
-#result.mrpp.splsda <- mrpp(as.data.frame(result.splsda[["variates"]][["X"]]), cleanfactor_f0, permutations = 999, distance = "euclidean")
+#Generation F1
 
-average.dist_f0 <- (result.2omics.spls[["variates"]][["X"]]+result.2omics.spls[["variates"]][["Y"]])/2 #calculate XY-variate 
-result.permanova.2omicsspls <- adonis2(average.dist_f0 ~ cleanfactor_f0, data = as.data.frame(average.dist_f0), method = "euclidean", by = "terms", permutations = 999, parallel = getOption("mc.cores")) #PERMANOVA for two-omics sPLS
-#result.mrpp.2omicsspls <- mrpp(as.data.frame(average.dist_f0), cleanfactor_f0, permutations = 999, distance = "euclidean")
+##sorting data for statistical methods
+lipids_f1 <- subset(lipids, generation == 'F1', 5:19) 
+lipids_f1[] <- lapply(lipids_f1, as.numeric) 
+
+metabolites_f1 <- subset(metabolites, generation == 'F1', 5:28) 
+metabolites_f1[] <- lapply(metabolites_f1, as.numeric)
+
+lip_met_f1 <- c("Glycerol","Choline","Acetate","Phosphocholine","Ethanolamine","Phosphoethanolamine","myo.Inositol","triOHbut") #vector for metabolite selector
+metlip_f1 <- metabolites_f1[lip_met_f1] 
+
+design_f1 <- subset(lipids, generation == 'F1', c('sample', 'group')) 
+f1_factors <- as.factor(design_f1$group) 
+
+##remove missing values and adapt factors
+cleanlipids_f1 <- na.omit(lipids_f1[!(rownames(lipids_f1) %in% c("F1_HFDt3")),]) 
+clean.metlip_f1 <- metlip_f1[rownames(cleanlipids_f1),] 
+clean.metabolites_f1 <- metabolites_f1[rownames(cleanlipids_f1), !(colnames(metabolites_f1) %in% lip_met_f1)] 
+all(rownames(cleanlipids_f1) == rownames(clean.metlip_f1)) 
+all(rownames(cleanlipids_f1) == rownames(clean.metabolites_f1)) 
+cleanfactor_f1 <- as.factor(rep(c("CTRL","HFD","HFDt"), times = c(5,6,5))) 
+labels_f1 <- c("CTRL1","CTRL3","CTRL4","CTRL5","CTRL6","HFD1","HFD2","HFD3","HFD4","HFD5","HFD6","HFDt1","HFDt2","HFDt4","HFDt5","HFDt6")
+
+##run PLS-DA and sPLS-DA
+
+###obtain variable loading factors by PLS-DA (2 components) and write the output in .csv
+result.plsda_f1 <- plsda(cleanlipids_f1, cleanfactor_f1, ncomp = 2)
+write.table(result.plsda_f1[["loadings"]][["X"]], "PLS-DA gen1 - Component load.csv", sep=";", col.names = NA) 
+
+###sPLS-DA, two components, selecting the number of variables with PLS-DA component load > |0.2| for components 1 and 2
+result.splsda_f1 <- splsda(cleanlipids_f1, cleanfactor_f1, ncomp = 2, keepX = c(10, 5))
+
+###Save sPLS-DA plot 
+tiff("sPLS-DA - Generation f1.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.splsda_f1, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="sPLS-DA - Generation f1")
+dev.off()
+
+###Save sPLS-DA plot with background
+tiff("sPLS-DA background - Generation f1.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.splsda_f1, comp = 1:2, group = cleanfactor_f1, ind.names = labels_f1, title = "Generation f1: sPLS-DA", 
+legend = FALSE, centroid = TRUE, col.per.group = c("dodgerblue","red3","darkgreen"), abline = TRUE, background = background)
+dev.off()
+
+##use PERMANOVA to find p-values for sPLS-DA (vegan package)
+result.permanova.splsda_f1 <- adonis2(result.splsda_f1[["variates"]][["X"]] ~ cleanfactor_f1, data = as.data.frame(result.splsda_f1[["variates"]][["X"]]), 
+method = "euclidean", by = "terms", permutations = 999, parallel = getOption("mc.cores"))
+write.table(result.permanova.splsda_f1, "sPLS-DA gen1 - PERMANOVA.csv", sep=";", col.names = NA)
+
+##run two-omics PLS and sPLS
+###obtain variable loading factors by PLS (2 blocks, 2 components) and write the output in .csv
+result.2omics.pls_f1 <- pls(cleanlipids_f1, clean.metlip_f1) 
+write.table(result.2omics.pls_f1[["loadings"]][["X"]], "PLS gen1 - Fatty acids.csv", sep=";", col.names = NA)
+write.table(result.2omics.pls_f1[["loadings"]][["Y"]], "sPLS gen1 - Lipid-related metabolites.csv", sep=";", col.names = NA)
+
+##two-omics sPLS
+###two-omics sPLS, two blocks (fatty acids vs. lipid-related metabolites) and two components, selecting the number of variables with PLS component load > |0.2| for components 1 and 2
+result.2omics.spls_f1 <- spls(cleanlipids_f1, clean.metlip_f1, ncomp = 2, keepX = c(9, 5), keepY = c(5,6))
+
+###save 2-Omics sPLS plot
+tiff("2-omics sPLS - Generation f1.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.2omics.spls_f1, group = cleanfactor_f1, col.per.group = c("dodgerblue","red3","darkgreen"), 
+rep.space = "XY-variate", centroid = TRUE, ellipse = TRUE, abline = TRUE, size.xlabel = 12, size.ylabel = 12, ind.names = labels_f1,  
+xlim = c(-5,5), ylim = c(-5,5), title = 'Generation f1: 2-omics sPLS')
+dev.off()
+
+###save 2-Omics sPLS network plot
+svg("2-omics sPLS network - Generation f1.svg")
+network(result.2omics.spls_f1, comp = c(1,2), color.node = c('orchid', 'brown'), 
+row.names = c(" C14:0 "," C16:0 ", "C16:1n7", " C18:0 ", "C18:1n9", "C18:1n7", "C18:2n6", "C20:3n6", "C20:4n6", "C22:5n6", "C22:6n3"), 
+col.names = c("Glycerol","Choline","Acetate","P-Choline","EtNH2","P-EtNH2","m-Inositol","3OH-But"), 
+cex.node.name = 10, lty.edge = c("solid", "dashed"), lwd.edge = c(2,2), cutoff = 0.49)
+dev.off()
+
+##use PERMANOVA to find p-values for two-omics sPLS (vegan package) and write to .csv
+average.dist_f1 <- (result.2omics.spls[["variates"]][["X"]]+result.2omics.spls[["variates"]][["Y"]])/2 
+result.permanova.2omicsspls_f1 <- adonis2(average.dist_f1 ~ cleanfactor_f1, data = as.data.frame(average.dist_f1), method = "euclidean", by = "terms", 
+permutations = 999, parallel = getOption("mc.cores")) 
+write.table(result.permanova.2omicsspls_f1, "2omics sPLS gen1 - PERMANOVA.csv", sep=";", col.names = NA)
+
+
+#Generation F2
+
+##sorting data for statistical methods
+
+lipids_f2 <- subset(lipids, generation == 'F2', 5:19) 
+lipids_f2[] <- lapply(lipids_f2, as.numeric) 
+
+metabolites_f2 <- subset(metabolites, generation == 'F2', 5:28) 
+metabolites_f2[] <- lapply(metabolites_f2, as.numeric)
+
+lip_met_f2 <- c("Glycerol","Choline","Acetate","Phosphocholine","Ethanolamine","Phosphoethanolamine","myo.Inositol","triOHbut") 
+metlip_f2 <- metabolites_f2[lip_met_f2] 
+
+design_f2 <- subset(lipids, generation == 'F2', c('sample', 'group')) 
+f2_factors <- as.factor(design_f2$group)  
+
+##remove missing values and adapt factors
+###for sPLS-DA only
+cleanlipids_1_f2 <- lipids_f2[!(rownames(lipids_f2) %in% "F2_CTRL1"),] #remove rows with missing values
+cleanfactor_1_f2 <- as.factor(rep(c("CTRL","HFD","HFDt"), times = c(5,5,6))) #remaining samples
+labels_1_f2 <- c("CTRL2","CTRL3","CTRL4","CTRL5","CTRL6","HFD1","HFD2","HFD3","HFD5","HFD6","HFDt1","HFDt2","HFDt3","HFDt4","HFDt5","HFDt6")
+
+cleanlipids_f2 <- na.omit(lipids_f2[!(rownames(lipids_f2) %in% c("F2_CTRL1","F2_HFD2","F2_HFDt5")),]) 
+clean.metlip_f2 <- metlip_f2[rownames(cleanlipids_f2),] #remove samples with missing value in lipids
+clean.metabolites_f2 <- metabolites_f2[rownames(cleanlipids_f2), !(colnames(metabolites_f2) %in% lip_met_f2)]
+all(rownames(cleanlipids_f2) == rownames(clean.metlip_f2)) 
+all(rownames(cleanlipids_f2) == rownames(clean.metabolites_f2)) #verify consistency between tables
+cleanfactor_f2 <- as.factor(rep(c("CTRL","HFD","HFDt"), times = c(5,4,5))) #remaining samples
+labels_f2 <- c("CTRL2","CTRL3","CTRL4","CTRL5","CTRL6","HFD1","HFD3","HFD5","HFD6","HFDt1","HFDt2","HFDt3","HFDt4","HFDt6")
+
+##run PLS-DA and sPLS-DA
+
+###obtain variable loading factors by PLS-DA (2 components) and write the output in .csv
+result.plsda_f2 <- plsda(cleanlipids_1_f2, cleanfactor_1_f2, ncomp = 2)
+write.table(result.plsda_f2[["loadings"]][["X"]], "PLS-DA gen2 - Component load.csv", sep=";", col.names = NA) 
+
+###sPLS-DA, two components, selecting the number of variables with PLS-DA component load > |0.2| for components 1 and 2
+result.splsda_f2 <- splsda(cleanlipids_1_f2, cleanfactor_1_f2, ncomp = 2, keepX = c(10, 5))
+
+###Save sPLS-DA plot 
+tiff("sPLS-DA - Generation f2.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.splsda_f2, ind.names = FALSE, legend=TRUE, ellipse = TRUE, title="sPLS-DA - Generation f2")
+dev.off()
+
+###Save sPLS-DA plot with background
+tiff("sPLS-DA background - Generation f2.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.splsda_f2, comp = 1:2, group = cleanfactor_1_f2, ind.names = labels_1_f2, title = "Generation f2: sPLS-DA", 
+legend = FALSE, centroid = TRUE, col.per.group = c("dodgerblue","red3","darkgreen"), abline = TRUE, background = background)
+dev.off()
+
+##use PERMANOVA to find p-values for sPLS-DA (vegan package)
+library(vegan)
+result.permanova.splsda_f2 <- adonis2(result.splsda_f2[["variates"]][["X"]] ~ cleanfactor_1_f2, data = as.data.frame(result.splsda_f2[["variates"]][["X"]]), 
+method = "euclidean", by = "terms", permutations = 999, parallel = getOption("mc.cores"))
+write.table(result.permanova.splsda_f2, "sPLS-DA gen2 - PERMANOVA.csv", sep=";", col.names = NA)
+
+##run two-omics PLS and sPLS
+###obtain variable loading factors by PLS (2 blocks, 2 components) and write the output in .csv
+result.2omics.pls_f2 <- pls(cleanlipids_f2, clean.metlip_f2) 
+write.table(result.2omics.pls_f2[["loadings"]][["X"]], "PLS gen2 - Fatty acids.csv", sep=";", col.names = NA)
+write.table(result.2omics.pls_f2[["loadings"]][["Y"]], "sPLS gen2 - Lipid-related metabolites.csv", sep=";", col.names = NA)
+
+##two-omics sPLS
+###two-omics sPLS, two blocks (fatty acids vs. lipid-related metabolites) and two components, selecting the number of variables with PLS component load > |0.2| for components 1 and 2
+result.2omics.spls_f2 <- spls(cleanlipids_f2, clean.metlip_f2, ncomp = 2, keepX = c(9, 5), keepY = c(5,6))
+
+###save 2-Omics sPLS plot
+tiff("2-omics sPLS - Generation f2.tiff", width=600, height=600, units="px", res=100)
+plotIndiv(result.2omics.spls_f2, group = cleanfactor_f2, col.per.group = c("dodgerblue","red3","darkgreen"), 
+rep.space = "XY-variate", centroid = TRUE, ellipse = TRUE, abline = TRUE, size.xlabel = 12, size.ylabel = 12, ind.names = labels_f2,  
+xlim = c(-5,5), ylim = c(-5,5), title = 'Generation f2: 2-omics sPLS')
+dev.off()
+
+###save 2-Omics sPLS network plot
+svg("2-omics sPLS network - Generation f2.svg")
+network(result.2omics.spls_f2, comp = c(1,2), color.node = c('orchid', 'brown'), 
+row.names = c(" C14:0 "," C16:0 ", "C16:1n7", " C18:0 ", "C18:1n9", "C18:1n7", "C18:2n6", "C20:3n6", "C20:4n6", "C22:5n6", "C22:6n3"), 
+col.names = c("Glycerol","Choline","Acetate","P-Choline","EtNH2","P-EtNH2","m-Inositol","3OH-But"), 
+cex.node.name = 10, lty.edge = c("solid", "dashed"), lwd.edge = c(2,2), cutoff = 0.49)
+dev.off()
+
+##use PERMANOVA to find p-values for two-omics sPLS (vegan package) and write to .csv
+average.dist_f2 <- (result.2omics.spls[["variates"]][["X"]]+result.2omics.spls[["variates"]][["Y"]])/2 
+result.permanova.2omicsspls_f2 <- adonis2(average.dist_f2 ~ cleanfactor_f2, data = as.data.frame(average.dist_f2), method = "euclidean", by = "terms", 
+permutations = 999, parallel = getOption("mc.cores")) 
+write.table(result.permanova.2omicsspls_f2, "2omics sPLS gen2 - PERMANOVA.csv", sep=";", col.names = NA)
+
