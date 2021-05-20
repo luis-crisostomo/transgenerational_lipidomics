@@ -10,3 +10,4 @@ This analysis is structured as follows:
 1. sPLS-DA of data obtained from GC-MS of testicular lipids (lipidomics)
 2. 2-omics sPLS, combining GC-MS data (lipidomics) with 1H-NMR data from lipid-related metabolites in testicular extracts (metabolomics)
 
+[![DOI](https://zenodo.org/badge/312914315.svg)](https://zenodo.org/badge/latestdoi/312914315)
